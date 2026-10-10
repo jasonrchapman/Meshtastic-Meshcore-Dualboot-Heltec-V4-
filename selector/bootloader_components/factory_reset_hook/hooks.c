@@ -19,17 +19,19 @@
  * logic, just nudging that existing fallback to fire on a real
  * power-on-class reset.
  *
- * otadata offset/size are hardcoded from this project's
- * partitions_dualboot.csv (otadata, 0x1C000, 0x2000) - flash isn't
- * partition-table-aware yet at this point in boot. If that layout ever
- * changes, update these two constants to match.
+ * The otadata partition is located by reading the real partition table off
+ * flash at bootloader_after_init() time, via
+ * bootloader_common_erase_part_type_data() - the same public function
+ * ESP-IDF's own CONFIG_BOOTLOADER_FACTORY_RESET feature uses internally
+ * (see bootloader/subproject/main/bootloader_start.c). No offset/size is
+ * hardcoded here, so this hook works with whatever partitions_dualboot.csv
+ * layout a project actually builds with - it was previously hardcoded to
+ * one specific offset, which silently broke if the partition table the
+ * selector was built against didn't match.
  */
 #include "esp_log.h"
 #include "esp_rom_sys.h"
-#include "bootloader_flash_priv.h"
-
-#define OTADATA_OFFSET 0x1C000
-#define OTADATA_SIZE   0x2000
+#include "bootloader_common.h"
 
 static const char *TAG = "dualboot-hook";
 
@@ -65,8 +67,9 @@ void bootloader_after_init(void) {
     }
 
     ESP_LOGI(TAG, "Power-on-class reset (reason=%d) - erasing otadata so the selector always shows", reason);
-    esp_err_t err = bootloader_flash_erase_range(OTADATA_OFFSET, OTADATA_SIZE);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "otadata erase failed: %d", err);
+    /* list_erase="" - erase nothing by label, just the otadata partition
+     * (ota_data_erase=true), wherever the real partition table says it is. */
+    if (!bootloader_common_erase_part_type_data("", true)) {
+        ESP_LOGE(TAG, "otadata erase failed");
     }
 }
