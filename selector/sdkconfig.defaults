@@ -17,18 +17,30 @@ CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP=n
 # NVS
 CONFIG_NVS_ENCRYPTION=n
 
-# Reduce binary size (selector must fit in 1MB factory partition)
+# Reduce binary size (selector must fit comfortably in the 2MB factory partition)
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
-CONFIG_BOOTLOADER_LOG_LEVEL_NONE=y
+CONFIG_BOOTLOADER_LOG_LEVEL_INFO=y
 CONFIG_LOG_DEFAULT_LEVEL_WARN=y
 
-# USB serial (ESP32-S3)
-CONFIG_ESP_CONSOLE_USB_CDC=y
+# Console on UART, not USB (ESP32-S3): the dual-boot handoff bug traces to this
+# peripheral - a USB console here shares hardware with whichever app
+# (MeshCore/Meshtastic) boots next, and the host never sees a clean disconnect
+# in between. UART keeps console output available for debugging without
+# touching USB at all during the boot-selection window.
+#
+# IDF defaults to ALSO enabling a secondary console on the native
+# USB_SERIAL_JTAG peripheral when UART is primary on this chip - that's the
+# exact peripheral mode both MeshCore 1.17.1 and Meshtastic use
+# (ARDUINO_USB_MODE=1), so leaving it on would defeat this fix. Disable it.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
-# Hold PRG (GPIO0) for 3s on any reset to wipe OTA data and return to selector
-CONFIG_BOOTLOADER_FACTORY_RESET=y
-CONFIG_BOOTLOADER_NUM_PIN_FACTORY_RESET=0
-CONFIG_BOOTLOADER_FACTORY_RESET_PIN_LOW=y
-CONFIG_BOOTLOADER_OTA_DATA_ERASE=y
-CONFIG_BOOTLOADER_DATA_FACTORY_RESET=""
-CONFIG_BOOTLOADER_HOLD_TIME_GPIO=2
+# NOTE: the GPIO-hold factory-reset feature (CONFIG_BOOTLOADER_FACTORY_RESET,
+# "hold PRG for 3s") used to be here. Removed - confirmed by hand-testing
+# that holding PRG through a reset always wins the race against the ROM's
+# own download-mode strapping check on this board, so the bootloader's own
+# long-hold detection never gets a chance to run. Replaced by the
+# bootloader_components/factory_reset_hook/ reset-reason hook instead -
+# see that file for the real, reliable mechanism: every hardware reset
+# (RST button/power-on) now shows the selector automatically, no PRG
+# involved at all.
